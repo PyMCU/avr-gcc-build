@@ -76,11 +76,16 @@ jobs:
           echo "Found: $LINUX_DIR"
           "$LINUX_DIR/bin/avr-gcc" --version
 
+      - name: Stage Linux toolchain for upload
+        run: |
+          LINUX_DIR=$(ls -d build/avr-gcc-*-x64-linux | head -1)
+          cp -r "$LINUX_DIR" linux-toolchain-staged
+
       - name: Upload Linux x64 toolchain
         uses: actions/upload-artifact@v4
         with:
           name: toolchain-linux-x64
-          path: build/avr-gcc-*-x64-linux/
+          path: linux-toolchain-staged/
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -153,11 +158,16 @@ jobs:
           JOBCOUNT: "4"
         run: bash avr-gcc-build.sh
 
+      - name: Stage Windows x64 toolchain for upload
+        run: |
+          WIN_DIR=$(ls -d build/avr-gcc-*-x64-windows | head -1)
+          cp -r "$WIN_DIR" win-x64-toolchain-staged
+
       - name: Upload Windows x64 toolchain
         uses: actions/upload-artifact@v4
         with:
           name: toolchain-win-x64
-          path: build/avr-gcc-*-x64-windows/
+          path: win-x64-toolchain-staged/
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -230,11 +240,16 @@ jobs:
           JOBCOUNT: "4"
         run: bash avr-gcc-build.sh
 
+      - name: Stage Windows x86 toolchain for upload
+        run: |
+          WIN_DIR=$(ls -d build/avr-gcc-*-x86-windows | head -1)
+          cp -r "$WIN_DIR" win-x86-toolchain-staged
+
       - name: Upload Windows x86 toolchain
         uses: actions/upload-artifact@v4
         with:
           name: toolchain-win-x86
-          path: build/avr-gcc-*-x86-windows/
+          path: win-x86-toolchain-staged/
           retention-days: 1
 
   # ---------------------------------------------------------------------------
