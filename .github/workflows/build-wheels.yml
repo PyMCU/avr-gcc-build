@@ -18,6 +18,8 @@ jobs:
     name: Build Linux x64 toolchain
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +92,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-linux-x64
     timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -165,6 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-linux-x64
     timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -329,6 +335,8 @@ jobs:
     name: Package Linux x64 wheel
     needs: build-linux-x64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -351,6 +359,8 @@ jobs:
     name: Package Windows x64 wheel
     needs: build-win-x64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -373,6 +383,8 @@ jobs:
     name: Package Windows x86 wheel
     needs: build-win-x86
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -395,6 +407,8 @@ jobs:
     name: Package macOS arm64 wheel
     needs: build-macos-arm64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
