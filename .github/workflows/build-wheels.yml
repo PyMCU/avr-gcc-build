@@ -283,31 +283,39 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # macOS x86_64 — native Intel runner (macos-13), no Rosetta required.
+  # macOS x86_64 — Apple Silicon runner (macos-14) using Rosetta 2.
+  # The x86_64 Homebrew prefix lives at /usr/local; all brew/binary calls
+  # are prefixed with `arch -x86_64` to select the Intel slice.
   # Runs in parallel with build-macos-arm64.
   # ---------------------------------------------------------------------------
   build-macos-x64:
     name: Build macOS x86_64 toolchain
-    runs-on: macos-13
+    runs-on: macos-14
     timeout-minutes: 120
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install x86_64 Homebrew (Rosetta 2)
+        run: |
+          if [ ! -f /usr/local/bin/brew ]; then
+            arch -x86_64 /bin/bash -c \
+              "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+
       - name: Install AVR toolchain via Homebrew (x86_64)
         run: |
-          brew tap osx-cross/avr
-          brew install avr-gcc avr-binutils
+          arch -x86_64 /usr/local/bin/brew tap osx-cross/avr
+          arch -x86_64 /usr/local/bin/brew install avr-gcc avr-binutils
 
       - name: Locate x86_64 toolchain binaries
         id: locate-x64
         run: |
-          AVR_GCC=$(which avr-gcc)
-          BIN_DIR=$(dirname "$AVR_GCC")
+          BIN_DIR=$(arch -x86_64 /usr/local/bin/brew --prefix avr-gcc)/bin
           echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
-          echo "Found x86_64 avr-gcc at: $AVR_GCC"
-          avr-gcc --version
+          echo "Found x86_64 avr-gcc at: $BIN_DIR/avr-gcc"
+          arch -x86_64 "$BIN_DIR/avr-gcc" --version
 
       - name: Assemble x86_64 toolchain directory
         run: |
@@ -316,7 +324,7 @@ jobs:
           for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
             [ -f "$BIN_DIR/$bin" ] && cp "$BIN_DIR/$bin" output/avr-gcc-homebrew-x64-macos/bin/ || true
           done
-          SYSROOT=$(brew --prefix avr-gcc)/avr
+          SYSROOT=$(arch -x86_64 /usr/local/bin/brew --prefix avr-gcc)/avr
           if [ -d "$SYSROOT" ]; then
             cp -r "$SYSROOT" output/avr-gcc-homebrew-x64-macos/avr
           fi
