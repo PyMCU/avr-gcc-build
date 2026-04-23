@@ -327,7 +327,11 @@ jobs:
       - name: Locate x86_64 toolchain binaries
         id: locate-x64
         run: |
-          BIN_DIR=$(arch -x86_64 /usr/local/bin/brew --prefix avr-gcc)/bin
+          # Use the global x86_64 Homebrew bin dir (/usr/local/bin) where all
+          # formula executables are symlinked (both avr-gcc and avr-binutils tools
+          # such as avr-as, avr-objcopy). Using `brew --prefix avr-gcc` only finds
+          # the avr-gcc Cellar prefix and misses the avr-binutils tools.
+          BIN_DIR=/usr/local/bin
           echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
           echo "Found x86_64 avr-gcc at: $BIN_DIR/avr-gcc"
           arch -x86_64 "$BIN_DIR/avr-gcc" --version
