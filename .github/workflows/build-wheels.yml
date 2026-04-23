@@ -89,27 +89,28 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # Windows x64: needs the Linux toolchain in PATH for cross-compilation.
-  # Runs in parallel with build-win-x86 after build-linux-x64 completes.
+  # Windows x64: native build inside MSYS2 MINGW64 on a Windows runner.
+  # No dependency on build-linux-x64 — avr-gcc is compiled natively.
   # ---------------------------------------------------------------------------
   build-win-x64:
     name: Build Windows x64 toolchain
-    runs-on: ubuntu-latest
-    needs: build-linux-x64
-    timeout-minutes: 180
+    runs-on: windows-latest
+    timeout-minutes: 240
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Linux x64 toolchain
-        uses: actions/download-artifact@v4
+      - name: Set up MSYS2 (MINGW64)
+        uses: msys2/setup-msys2@v2
         with:
-          name: toolchain-linux-x64
-          path: linux-toolchain/
-
-      - name: Add Linux AVR-GCC to PATH
-        run: echo "${{ github.workspace }}/linux-toolchain/bin" >> $GITHUB_PATH
+          msystem: MINGW64
+          update: false
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            wget
+            texinfo
 
       - name: Restore source tarball cache
         uses: actions/cache@v4
@@ -119,17 +120,17 @@ jobs:
           restore-keys: avr-sources-v1-
 
       - name: Set up wget cache wrapper
+        shell: msys2 {0}
         run: |
           mkdir -p tarball-cache
-          mkdir -p /tmp/wget-wrap
-          cat > /tmp/wget-wrap/wget << 'WRAPPER'
+          cat > /usr/local/bin/wget << 'WRAPPER'
           #!/bin/bash
           URL=""
           for arg in "$@"; do
             case "$arg" in http*|ftp*) URL="$arg" ;; esac
           done
           FILE="$(basename "$URL")"
-          CACHE_DIR="${GITHUB_WORKSPACE}/tarball-cache"
+          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
           if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
             echo "[wget-cache] Cache hit: $FILE"
             cp "$CACHE_DIR/$FILE" "$FILE"
@@ -140,17 +141,10 @@ jobs:
             fi
           fi
           WRAPPER
-          chmod +x /tmp/wget-wrap/wget
-          echo "/tmp/wget-wrap" >> $GITHUB_PATH
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            wget make gcc g++ bzip2 xz-utils autoconf texinfo \
-            libgmp-dev libmpfr-dev libexpat1-dev mingw-w64
+          chmod +x /usr/local/bin/wget
 
       - name: Build Windows x64 AVR-GCC toolchain
+        shell: msys2 {0}
         env:
           FOR_LINUX: "0"
           FOR_WINX64: "1"
@@ -159,6 +153,7 @@ jobs:
         run: bash avr-gcc-build.sh
 
       - name: Stage Windows x64 toolchain for upload
+        shell: msys2 {0}
         run: |
           WIN_DIR=$(ls -d build/avr-gcc-*-x64-windows | head -1)
           cp -r "$WIN_DIR" win-x64-toolchain-staged
@@ -171,27 +166,28 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # Windows x86: mirrors build-win-x64 but produces 32-bit binaries.
+  # Windows x86: native build inside MSYS2 MINGW32 on a Windows runner.
   # Runs in parallel with build-win-x64.
   # ---------------------------------------------------------------------------
   build-win-x86:
     name: Build Windows x86 toolchain
-    runs-on: ubuntu-latest
-    needs: build-linux-x64
-    timeout-minutes: 180
+    runs-on: windows-latest
+    timeout-minutes: 240
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Linux x64 toolchain
-        uses: actions/download-artifact@v4
+      - name: Set up MSYS2 (MINGW32)
+        uses: msys2/setup-msys2@v2
         with:
-          name: toolchain-linux-x64
-          path: linux-toolchain/
-
-      - name: Add Linux AVR-GCC to PATH
-        run: echo "${{ github.workspace }}/linux-toolchain/bin" >> $GITHUB_PATH
+          msystem: MINGW32
+          update: false
+          install: >-
+            base-devel
+            mingw-w64-i686-toolchain
+            wget
+            texinfo
 
       - name: Restore source tarball cache
         uses: actions/cache@v4
@@ -201,17 +197,17 @@ jobs:
           restore-keys: avr-sources-v1-
 
       - name: Set up wget cache wrapper
+        shell: msys2 {0}
         run: |
           mkdir -p tarball-cache
-          mkdir -p /tmp/wget-wrap
-          cat > /tmp/wget-wrap/wget << 'WRAPPER'
+          cat > /usr/local/bin/wget << 'WRAPPER'
           #!/bin/bash
           URL=""
           for arg in "$@"; do
             case "$arg" in http*|ftp*) URL="$arg" ;; esac
           done
           FILE="$(basename "$URL")"
-          CACHE_DIR="${GITHUB_WORKSPACE}/tarball-cache"
+          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
           if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
             echo "[wget-cache] Cache hit: $FILE"
             cp "$CACHE_DIR/$FILE" "$FILE"
@@ -222,17 +218,10 @@ jobs:
             fi
           fi
           WRAPPER
-          chmod +x /tmp/wget-wrap/wget
-          echo "/tmp/wget-wrap" >> $GITHUB_PATH
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            wget make gcc g++ bzip2 xz-utils autoconf texinfo \
-            libgmp-dev libmpfr-dev libexpat1-dev mingw-w64
+          chmod +x /usr/local/bin/wget
 
       - name: Build Windows x86 AVR-GCC toolchain
+        shell: msys2 {0}
         env:
           FOR_LINUX: "0"
           FOR_WINX64: "0"
@@ -241,6 +230,7 @@ jobs:
         run: bash avr-gcc-build.sh
 
       - name: Stage Windows x86 toolchain for upload
+        shell: msys2 {0}
         run: |
           WIN_DIR=$(ls -d build/avr-gcc-*-x86-windows | head -1)
           cp -r "$WIN_DIR" win-x86-toolchain-staged
