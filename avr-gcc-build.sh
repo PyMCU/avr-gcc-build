@@ -147,7 +147,11 @@ log()
 
 installPackages()
 {
-	local requiredPackages=("wget" "make" "mingw-w64" "gcc" "g++" "bzip2" "xz-utils" "autoconf" "texinfo" "libgmp-dev" "libmpfr-dev" "libexpat1-dev")
+	local requiredPackages=("wget" "make" "gcc" "g++" "bzip2" "xz-utils" "autoconf" "texinfo" "libgmp-dev" "libmpfr-dev" "libexpat1-dev")
+	# mingw-w64 is only needed when cross-compiling for Windows
+	if [[ $FOR_WINX86 -eq 1 ]] || [[ $FOR_WINX64 -eq 1 ]]; then
+		requiredPackages+=("mingw-w64")
+	fi
 
 	if [[ $EUID -ne 0 ]]; then
 		log "Not running as root user. Checking whether all required packages are installed..."

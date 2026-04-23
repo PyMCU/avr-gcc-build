@@ -95,7 +95,8 @@ def _find_toolchain_dir(root: Path) -> Path:
 
 
 def _validate_toolchain(bin_dir: Path) -> None:
-    exe = ".exe" if sys.platform == "win32" else ""
+    plat_tag = os.environ.get("WHEEL_PLATFORM_TAG", "")
+    exe = ".exe" if sys.platform == "win32" or plat_tag.startswith("win") else ""
     missing = [b for b in _REQUIRED_BINS if not (bin_dir / (b + exe)).exists()]
     if missing:
         raise FileNotFoundError(
@@ -105,9 +106,11 @@ def _validate_toolchain(bin_dir: Path) -> None:
 
 
 def _build_manifest(toolchain_dir: Path, bin_dir: Path) -> dict:
-    gcc_version = _read_tool_version(bin_dir / "avr-gcc", r"(\d+\.\d+\.\d+)")
-    as_version = _read_tool_version(bin_dir / "avr-as", r"(\d+\.\d+)")
-    gdb_path = bin_dir / "avr-gdb"
+    plat_tag = os.environ.get("WHEEL_PLATFORM_TAG", "")
+    exe = ".exe" if sys.platform == "win32" or plat_tag.startswith("win") else ""
+    gcc_version = _read_tool_version(bin_dir / f"avr-gcc{exe}", r"(\d+\.\d+\.\d+)")
+    as_version = _read_tool_version(bin_dir / f"avr-as{exe}", r"(\d+\.\d+)")
+    gdb_path = bin_dir / f"avr-gdb{exe}"
     gdb_version = _read_tool_version(gdb_path, r"(\d+\.\d+)") if gdb_path.exists() else "n/a"
 
     return {
@@ -121,9 +124,8 @@ def _build_manifest(toolchain_dir: Path, bin_dir: Path) -> dict:
 
 def _read_tool_version(binary: Path, pattern: str) -> str:
     try:
-        exe = str(binary) + (".exe" if sys.platform == "win32" and not str(binary).endswith(".exe") else "")
         result = subprocess.run(
-            [exe, "--version"],
+            [str(binary), "--version"],
             capture_output=True, text=True, timeout=10
         )
         output = result.stdout + result.stderr
