@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ---------------------------------------------------------------------------
   # Linux + Windows: single Docker run (Linux is prerequisite for Windows cross)
@@ -160,16 +163,13 @@ jobs:
         with:
           name: toolchain-linux-x64
           path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatch
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
         working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: manylinux_2_17_x86_64
-        run: python -m hatch build --target wheel
+        run: uv build --wheel
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-linux-x64
@@ -185,16 +185,13 @@ jobs:
         with:
           name: toolchain-win-x64
           path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatch
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
         working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: win_amd64
-        run: python -m hatch build --target wheel
+        run: uv build --wheel
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-win-x64
@@ -210,16 +207,13 @@ jobs:
         with:
           name: toolchain-win-x86
           path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatch
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
         working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: win32
-        run: python -m hatch build --target wheel
+        run: uv build --wheel
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-win-x86
@@ -235,16 +229,13 @@ jobs:
         with:
           name: toolchain-macos-arm64
           path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatchling
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
         working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: macosx_14_0_arm64
-        run: python -m hatch build --target wheel
+        run: uv build --wheel
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-arm64
@@ -262,16 +253,13 @@ jobs:
         with:
           name: toolchain-macos-x64
           path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatchling
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
         working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: macosx_13_0_x86_64
-        run: python -m hatch build --target wheel
+        run: uv build --wheel
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-x64
@@ -294,11 +282,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - run: pip install hatchling
+      - uses: astral-sh/setup-uv@v6
 
       - name: Download all wheels
         uses: actions/download-artifact@v4
@@ -309,16 +293,22 @@ jobs:
 
       - name: Build sdist (no binaries)
         working-directory: python/
-        run: python -m hatch build --target sdist
+        run: uv build --sdist
 
       - name: Move sdist to dist/
         run: mv python/dist/*.tar.gz dist/
 
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+          retention-days: 1
+
       - name: Smoke test (Linux wheel)
         run: |
           WHEEL=$(ls dist/pymcu_avr_toolchain-*-manylinux_2_17_x86_64.whl | head -1)
-          pip install "$WHEEL" -e python/ --no-deps || pip install "$WHEEL"
-          python -c "
+          uv run --with "$WHEEL" python -c "
           import pymcu_avr_toolchain
           bin_dir = pymcu_avr_toolchain.get_bin_dir()
           print(f'bin_dir: {bin_dir}')
@@ -344,6 +334,35 @@ jobs:
       #   uses: softprops/action-gh-release@v2
       #   with:
       #     files: dist/*
+
+  # ---------------------------------------------------------------------------
+  # Publish to public PyPI (only on tag or release)
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: Publish to PyPI
+    needs: collect-and-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Publish to PyPI
+        run: uv publish dist/
 
   # ---------------------------------------------------------------------------
   # Publish to private PyPI index via headscale
