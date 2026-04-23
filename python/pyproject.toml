@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pymcu-avr-toolchain"
+version = "15.2.0"
+description = "Pre-built AVR-GCC 15.2.0 toolchain for PyMCU (avr-gcc, avr-as, avr-objcopy, avr-gdb, avr-libc)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later AND LGPL-3.0-or-later AND MIT AND BSD-2-Clause" }
+license-files = ["LICENSES/*", "NOTICE"]
+authors = [
+    { name = "Zak Kemble" },
+    { name = "Ivan Montiel Cardona", email = "developer@begeistert.dev" },
+]
+keywords = ["avr", "gcc", "toolchain", "embedded", "cross-compiler", "avr-gcc", "pymcu"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Software Development :: Compilers",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ZakKemble/avr-gcc-build"
+"Source (packaging)" = "https://github.com/pymcu/avr-gcc-build"
+"Bug Tracker" = "https://github.com/pymcu/avr-gcc-build/issues"
+
+[project.scripts]
+pymcu-avr-toolchain-info = "pymcu_avr_toolchain._cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pymcu_avr_toolchain"]
+artifacts = ["src/pymcu_avr_toolchain/bin/**"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "hatch_build.py",
+    "LICENSES/",
+    "NOTICE",
+    "README.md",
+]

@@ -1,0 +1,26 @@
+GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)
+=====================================================================
+
+This license applies to the following component in this distribution:
+  - GMP (GNU Multiple Precision Arithmetic Library) 6.3.0
+
+Copyright (C) 1991-2024 Free Software Foundation, Inc.
+
+GMP is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
+
+GMP is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
+
+Source Code Availability
+-------------------------
+The source code for GMP is available at:
+  https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+  https://gmplib.org/
+
+Full LGPL v3 text: https://www.gnu.org/licenses/lgpl-3.0.txt
+Full GPL v3 text (incorporated by reference): https://www.gnu.org/licenses/gpl-3.0.txt

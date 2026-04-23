@@ -1,0 +1,41 @@
+GNU General Public License v3.0 or later (GPL-3.0-or-later)
+============================================================
+
+This license applies to the following components in this distribution:
+  - GCC (GNU Compiler Collection) 15.2.0
+  - GNU Binutils 2.45
+  - GNU GDB 16.3
+
+Copyright (C) 1987-2025 Free Software Foundation, Inc.
+
+    GNU GCC is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    GNU GCC is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with GNU GCC.  If not, see <https://www.gnu.org/licenses/>.
+
+Note on GCC Runtime Library Exception
+--------------------------------------
+GCC is distributed with a Runtime Library Exception which permits linking
+object code and libraries that you compile with GCC into your programs
+without requiring those programs to be distributed under the GPL. This
+exception applies to the GCC runtime libraries (libgcc, libstdc++, etc.)
+that are linked into your compiled programs.
+
+See: https://www.gnu.org/licenses/gcc-exception-3.1.html
+
+Source Code Availability
+-------------------------
+The source code for GCC, Binutils, and GDB is available at:
+  GCC:      https://ftpmirror.gnu.org/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
+  Binutils: https://ftpmirror.gnu.org/binutils/binutils-2.45.tar.xz
+  GDB:      https://ftpmirror.gnu.org/gdb/gdb-16.3.tar.xz
+
+Full GPL v3 text: https://www.gnu.org/licenses/gpl-3.0.txt

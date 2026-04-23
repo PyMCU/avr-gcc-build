@@ -1,0 +1,74 @@
+pymcu-avr-toolchain
+===================
+
+This package distributes pre-built binaries of the AVR GCC toolchain.
+The packaging scripts and Python API are authored by Ivan Montiel Cardona
+and licensed under MIT.
+
+The build scripts (avr-gcc-build.sh, entrypoint.sh, permissions.sh) are
+authored by Zak Kemble and licensed under CC BY-SA 4.0.
+
+Source code for the packaging wrapper is available at:
+  https://github.com/pymcu/avr-gcc-build
+
+Component Attributions
+----------------------
+
+avr-gcc-build scripts:
+  Copyright (C) 2017-2025 Zak Kemble
+  License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+  https://creativecommons.org/licenses/by-sa/4.0/
+  See LICENSES/LICENSE-build-script.txt
+
+GCC 15.2.0:
+  Copyright (C) 1987-2025 Free Software Foundation, Inc.
+  License: GNU General Public License v3.0 or later (GPL-3.0-or-later)
+  Source code: https://ftpmirror.gnu.org/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
+  See LICENSES/LICENSE-gcc-binutils-gdb.txt
+
+GNU Binutils 2.45:
+  Copyright (C) 1990-2025 Free Software Foundation, Inc.
+  License: GNU General Public License v3.0 or later (GPL-3.0-or-later)
+  Source code: https://ftpmirror.gnu.org/binutils/binutils-2.45.tar.xz
+  See LICENSES/LICENSE-gcc-binutils-gdb.txt
+
+GNU GDB 16.3:
+  Copyright (C) 1986-2025 Free Software Foundation, Inc.
+  License: GNU General Public License v3.0 or later (GPL-3.0-or-later)
+  Source code: https://ftpmirror.gnu.org/gdb/gdb-16.3.tar.xz
+  See LICENSES/LICENSE-gcc-binutils-gdb.txt
+
+AVR-LibC 2.2.1:
+  Copyright (C) 1999-2025 The avr-libc team.
+  License: BSD-style (see LICENSES/LICENSE-avr-libc.txt)
+  Source code: https://github.com/avrdudes/avr-libc
+
+GMP 6.3.0:
+  Copyright (C) 1991-2024 Free Software Foundation, Inc.
+  License: GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)
+  Source code: https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+  See LICENSES/LICENSE-gmp.txt
+
+MPFR 4.2.2:
+  Copyright (C) 1991-2024 The MPFR Project.
+  License: GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)
+  Source code: https://www.mpfr.org/mpfr-4.2.2/mpfr-4.2.2.tar.xz
+  See LICENSES/LICENSE-mpfr.txt
+
+Expat 2.7.1:
+  Copyright (C) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
+  Copyright (C) 2001-2024 Expat maintainers
+  License: MIT
+  Source code: https://github.com/libexpat/libexpat
+  See LICENSES/LICENSE-expat.txt
+
+GPL Compliance Notice
+---------------------
+The GPL and LGPL require that source code for covered software be made
+available to recipients of the binaries. The source code for GCC, Binutils,
+GDB, GMP, and MPFR is available at the upstream URLs listed above.
+
+In accordance with GNU GPL v3 Section 6(d), the Corresponding Source is
+available via a public network server at no charge. You may also request
+the source code by opening an issue at:
+  https://github.com/pymcu/avr-gcc-build/issues

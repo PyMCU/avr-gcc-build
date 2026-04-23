@@ -1,0 +1,27 @@
+GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)
+=====================================================================
+
+This license applies to the following component in this distribution:
+  - MPFR (GNU Multiple-Precision Floating-Point Reliable Library) 4.2.2
+
+Copyright (C) 1991-2024 Free Software Foundation, Inc.
+Copyright (C) 2001-2024 The MPFR Project
+
+MPFR is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
+option) any later version.
+
+MPFR is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
+
+Source Code Availability
+-------------------------
+The source code for MPFR is available at:
+  https://www.mpfr.org/mpfr-4.2.2/mpfr-4.2.2.tar.xz
+  https://gitlab.inria.fr/mpfr/mpfr
+
+Full LGPL v3 text: https://www.gnu.org/licenses/lgpl-3.0.txt
+Full GPL v3 text (incorporated by reference): https://www.gnu.org/licenses/gpl-3.0.txt
