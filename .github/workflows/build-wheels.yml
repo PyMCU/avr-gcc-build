@@ -163,7 +163,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install hatchling
+      - run: pip install hatch
       - name: Build wheel
         working-directory: python/
         env:
@@ -188,7 +188,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install hatchling
+      - run: pip install hatch
       - name: Build wheel
         working-directory: python/
         env:
@@ -213,7 +213,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install hatchling
+      - run: pip install hatch
       - name: Build wheel
         working-directory: python/
         env:
