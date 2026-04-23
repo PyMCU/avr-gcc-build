@@ -5,11 +5,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: "Create GitHub Release after building"
-        type: boolean
-        default: false
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -105,48 +100,6 @@ jobs:
         with:
           name: toolchain-macos-arm64
           path: output/avr-gcc-homebrew-arm64-macos/
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
-  # macOS x86_64 — uses Homebrew avr-gcc on Intel runner
-  # ---------------------------------------------------------------------------
-  build-macos-x64:
-    name: Build macOS x86_64 toolchain
-    runs-on: macos-13
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install AVR toolchain via Homebrew
-        run: |
-          brew tap osx-cross/avr
-          brew install avr-gcc avr-binutils
-
-      - name: Locate toolchain binaries
-        id: locate
-        run: |
-          AVR_GCC=$(which avr-gcc)
-          BIN_DIR=$(dirname "$AVR_GCC")
-          echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
-          avr-gcc --version
-
-      - name: Assemble toolchain directory
-        run: |
-          mkdir -p output/avr-gcc-homebrew-x64-macos/bin
-          BIN_DIR="${{ steps.locate.outputs.bin_dir }}"
-          for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
-            [ -f "$BIN_DIR/$bin" ] && cp "$BIN_DIR/$bin" output/avr-gcc-homebrew-x64-macos/bin/ || true
-          done
-          SYSROOT=$(brew --prefix avr-gcc)/avr
-          if [ -d "$SYSROOT" ]; then
-            cp -r "$SYSROOT" output/avr-gcc-homebrew-x64-macos/avr
-          fi
-
-      - name: Upload macOS x64 toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-macos-x64
-          path: output/avr-gcc-homebrew-x64-macos/
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -252,31 +205,6 @@ jobs:
           name: wheel-macos-arm64
           path: python/dist/*.whl
 
-  package-macos-x64:
-    name: Package macOS x64 wheel
-    needs: build-macos-x64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: toolchain-macos-x64
-          path: toolchain/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install hatchling
-      - name: Build wheel
-        working-directory: python/
-        env:
-          AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
-          WHEEL_PLATFORM_TAG: macosx_13_0_x86_64
-        run: python -m hatch build --target wheel
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-macos-x64
-          path: python/dist/*.whl
-
   # ---------------------------------------------------------------------------
   # Collect, build sdist, smoke-test, and release
   # ---------------------------------------------------------------------------
@@ -287,10 +215,9 @@ jobs:
       - package-win-x64
       - package-win-x86
       - package-macos-arm64
-      - package-macos-x64
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -337,46 +264,44 @@ jobs:
       - name: List artifacts
         run: ls -lh dist/
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release
-        uses: softprops/action-gh-release@v2
+      # GitHub Release and public PyPI publishing are intentionally disabled.
+      # Enable once the package is ready for public distribution.
+      # - name: Create GitHub Release
+      #   if: startsWith(github.ref, 'refs/tags/') || inputs.create_release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: dist/*
+
+  # ---------------------------------------------------------------------------
+  # Publish to private PyPI index via headscale
+  # ---------------------------------------------------------------------------
+  publish-private:
+    name: Publish to private PyPI
+    needs: collect-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
         with:
-          files: dist/*
-          prerelease: ${{ contains(github.ref, 'dev') || contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-          body: |
-            ## pymcu-avr-toolchain ${{ github.ref_name }}
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
 
-            Pre-built AVR GCC toolchain wheels for PyMCU.
+      - name: Connect to headscale network
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.HEADSCALE_AUTH_KEY }}
+          args: --login-server ${{ secrets.HEADSCALE_URL }}
 
-            ### Components
-            | Component | Version |
-            |-----------|---------|
-            | avr-gcc | 15.2.0 |
-            | Binutils | 2.45 |
-            | GDB | 16.3 |
-            | AVR-LibC | 2.2.1 |
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
 
-            ### Platforms
-            | Wheel | Platform |
-            |-------|----------|
-            | `pymcu_avr_toolchain-*-manylinux_2_17_x86_64.whl` | Linux x86_64 |
-            | `pymcu_avr_toolchain-*-win_amd64.whl` | Windows 64-bit |
-            | `pymcu_avr_toolchain-*-win32.whl` | Windows 32-bit |
-            | `pymcu_avr_toolchain-*-macosx_14_0_arm64.whl` | macOS Apple Silicon |
-            | `pymcu_avr_toolchain-*-macosx_13_0_x86_64.whl` | macOS Intel |
-
-            ### Install
-
-            ```bash
-            pip install pymcu-avr-toolchain \
-              --find-links https://github.com/PyMCU/avr-gcc-build/releases/download/${{ github.ref_name }}/
-            ```
-
-            Or with PyMCU:
-            ```bash
-            pip install "pymcu[avr]" pymcu-avr-toolchain \
-              --find-links https://github.com/PyMCU/avr-gcc-build/releases/download/${{ github.ref_name }}/
-            ```
-
-            ### Verify SHA256 checksums
-            See `SHA256SUMS` attached to this release.
+      - name: Publish to private registry (Gitea)
+        run: |
+          uv publish \
+            --publish-url "${{ secrets.PRIVATE_PYPI_URL }}" \
+            --username "${{ secrets.PRIVATE_PYPI_USERNAME }}" \
+            --password "${{ secrets.PRIVATE_PYPI_TOKEN }}" \
+            dist/
