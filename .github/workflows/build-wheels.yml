@@ -11,71 +11,249 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Linux + Windows: single Docker run (Linux is prerequisite for Windows cross)
+  # Linux x64: build natively on ubuntu-latest (no Docker).
+  # Uploads the Linux toolchain as an artifact so the Windows jobs can reuse it.
   # ---------------------------------------------------------------------------
-  build-linux-windows:
-    name: Build Linux x64 + Windows toolchains
+  build-linux-x64:
+    name: Build Linux x64 toolchain
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t avrgccbuild .
-
-      - name: Run Docker build (Linux x64 + Windows x64 + Windows x86)
-        run: |
-          mkdir -p output
-          docker run --rm \
-            -v "${{ github.workspace }}/output:/output" \
-            -e FOR_LINUX=1 \
-            -e FOR_WINX64=1 \
-            -e FOR_WINX86=1 \
-            -e JOBCOUNT=4 \
-            avrgccbuild
-
-      - name: Verify Linux toolchain
-        run: |
-          LINUX_DIR=$(ls -d output/avr-gcc-*-x64-linux | head -1)
-          echo "Found: $LINUX_DIR"
-          $LINUX_DIR/bin/avr-gcc --version
-
-      - name: Upload Linux x64 toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-linux-x64
-          path: output/avr-gcc-*-x64-linux/
-          retention-days: 1
-
-      - name: Upload Windows x64 toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-win-x64
-          path: output/avr-gcc-*-x64-windows/
-          retention-days: 1
-
-      - name: Upload Windows x86 toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-win-x86
-          path: output/avr-gcc-*-x86-windows/
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
-  # macOS arm64 + x86_64 — both built on Apple Silicon runner (macos-14).
-  # x86_64 binaries are produced via Rosetta 2 using the x86_64 Homebrew prefix
-  # (/usr/local) alongside the native arm64 prefix (/opt/homebrew).
-  # ---------------------------------------------------------------------------
-  build-macos-arm64:
-    name: Build macOS arm64 + x86_64 toolchains
-    runs-on: macos-14
     timeout-minutes: 180
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # ---- arm64 ----
+      - name: Restore source tarball cache
+        uses: actions/cache@v4
+        with:
+          path: tarball-cache/
+          key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
+          restore-keys: avr-sources-v1-
+
+      - name: Set up wget cache wrapper
+        run: |
+          mkdir -p tarball-cache
+          mkdir -p /tmp/wget-wrap
+          cat > /tmp/wget-wrap/wget << 'WRAPPER'
+          #!/bin/bash
+          URL=""
+          for arg in "$@"; do
+            case "$arg" in http*|ftp*) URL="$arg" ;; esac
+          done
+          FILE="$(basename "$URL")"
+          CACHE_DIR="${GITHUB_WORKSPACE}/tarball-cache"
+          if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
+            echo "[wget-cache] Cache hit: $FILE"
+            cp "$CACHE_DIR/$FILE" "$FILE"
+          else
+            /usr/bin/wget "$@"
+            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+              cp "$FILE" "$CACHE_DIR/" 2>/dev/null || true
+            fi
+          fi
+          WRAPPER
+          chmod +x /tmp/wget-wrap/wget
+          echo "/tmp/wget-wrap" >> $GITHUB_PATH
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            wget make gcc g++ bzip2 xz-utils autoconf texinfo \
+            libgmp-dev libmpfr-dev libexpat1-dev
+
+      - name: Build Linux x64 AVR-GCC toolchain
+        env:
+          FOR_LINUX: "1"
+          FOR_WINX64: "0"
+          FOR_WINX86: "0"
+          JOBCOUNT: "4"
+        run: bash avr-gcc-build.sh
+
+      - name: Verify Linux toolchain
+        run: |
+          LINUX_DIR=$(ls -d build/avr-gcc-*-x64-linux | head -1)
+          echo "Found: $LINUX_DIR"
+          "$LINUX_DIR/bin/avr-gcc" --version
+
+      - name: Stage Linux toolchain for upload
+        run: |
+          LINUX_DIR=$(ls -d build/avr-gcc-*-x64-linux | head -1)
+          cp -r "$LINUX_DIR" linux-toolchain-staged
+
+      - name: Upload Linux x64 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-linux-x64
+          path: linux-toolchain-staged/
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Windows x64: native build inside MSYS2 MINGW64 on a Windows runner.
+  # No dependency on build-linux-x64 — avr-gcc is compiled natively.
+  # ---------------------------------------------------------------------------
+  build-win-x64:
+    name: Build Windows x64 toolchain
+    runs-on: windows-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (MINGW64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            wget
+            texinfo
+
+      - name: Restore source tarball cache
+        uses: actions/cache@v4
+        with:
+          path: tarball-cache/
+          key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
+          restore-keys: avr-sources-v1-
+
+      - name: Set up wget cache wrapper
+        shell: msys2 {0}
+        run: |
+          mkdir -p tarball-cache
+          cat > /usr/local/bin/wget << 'WRAPPER'
+          #!/bin/bash
+          URL=""
+          for arg in "$@"; do
+            case "$arg" in http*|ftp*) URL="$arg" ;; esac
+          done
+          FILE="$(basename "$URL")"
+          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
+          if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
+            echo "[wget-cache] Cache hit: $FILE"
+            cp "$CACHE_DIR/$FILE" "$FILE"
+          else
+            /usr/bin/wget "$@"
+            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+              cp "$FILE" "$CACHE_DIR/" 2>/dev/null || true
+            fi
+          fi
+          WRAPPER
+          chmod +x /usr/local/bin/wget
+
+      - name: Build Windows x64 AVR-GCC toolchain
+        shell: msys2 {0}
+        env:
+          FOR_LINUX: "0"
+          FOR_WINX64: "1"
+          FOR_WINX86: "0"
+          JOBCOUNT: "4"
+        run: bash avr-gcc-build.sh
+
+      - name: Stage Windows x64 toolchain for upload
+        shell: msys2 {0}
+        run: |
+          WIN_DIR=$(ls -d build/avr-gcc-*-x64-windows | head -1)
+          cp -r "$WIN_DIR" win-x64-toolchain-staged
+
+      - name: Upload Windows x64 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-win-x64
+          path: win-x64-toolchain-staged/
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Windows x86: native build inside MSYS2 MINGW32 on a Windows runner.
+  # Runs in parallel with build-win-x64.
+  # ---------------------------------------------------------------------------
+  build-win-x86:
+    name: Build Windows x86 toolchain
+    runs-on: windows-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (MINGW32)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: false
+          install: >-
+            base-devel
+            mingw-w64-i686-toolchain
+            wget
+            texinfo
+
+      - name: Restore source tarball cache
+        uses: actions/cache@v4
+        with:
+          path: tarball-cache/
+          key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
+          restore-keys: avr-sources-v1-
+
+      - name: Set up wget cache wrapper
+        shell: msys2 {0}
+        run: |
+          mkdir -p tarball-cache
+          cat > /usr/local/bin/wget << 'WRAPPER'
+          #!/bin/bash
+          URL=""
+          for arg in "$@"; do
+            case "$arg" in http*|ftp*) URL="$arg" ;; esac
+          done
+          FILE="$(basename "$URL")"
+          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
+          if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
+            echo "[wget-cache] Cache hit: $FILE"
+            cp "$CACHE_DIR/$FILE" "$FILE"
+          else
+            /usr/bin/wget "$@"
+            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+              cp "$FILE" "$CACHE_DIR/" 2>/dev/null || true
+            fi
+          fi
+          WRAPPER
+          chmod +x /usr/local/bin/wget
+
+      - name: Build Windows x86 AVR-GCC toolchain
+        shell: msys2 {0}
+        env:
+          FOR_LINUX: "0"
+          FOR_WINX64: "0"
+          FOR_WINX86: "1"
+          JOBCOUNT: "4"
+        run: bash avr-gcc-build.sh
+
+      - name: Stage Windows x86 toolchain for upload
+        shell: msys2 {0}
+        run: |
+          WIN_DIR=$(ls -d build/avr-gcc-*-x86-windows | head -1)
+          cp -r "$WIN_DIR" win-x86-toolchain-staged
+
+      - name: Upload Windows x86 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-win-x86
+          path: win-x86-toolchain-staged/
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # macOS arm64 — native Apple Silicon (macos-14).
+  # ---------------------------------------------------------------------------
+  build-macos-arm64:
+    name: Build macOS arm64 toolchain
+    runs-on: macos-14
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install AVR toolchain via Homebrew (arm64)
         run: |
           brew tap osx-cross/avr
@@ -97,7 +275,6 @@ jobs:
           for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
             [ -f "$BIN_DIR/$bin" ] && cp "$BIN_DIR/$bin" output/avr-gcc-homebrew-arm64-macos/bin/ || true
           done
-          # Include avr headers from Homebrew sysroot
           SYSROOT=$(brew --prefix avr-gcc)/avr
           if [ -d "$SYSROOT" ]; then
             cp -r "$SYSROOT" output/avr-gcc-homebrew-arm64-macos/avr
@@ -110,7 +287,21 @@ jobs:
           path: output/avr-gcc-homebrew-arm64-macos/
           retention-days: 1
 
-      # ---- x86_64 (via Rosetta 2 + x86_64 Homebrew at /usr/local) ----
+  # ---------------------------------------------------------------------------
+  # macOS x86_64 — Apple Silicon runner (macos-14) using Rosetta 2.
+  # The x86_64 Homebrew prefix lives at /usr/local; all brew/binary calls
+  # are prefixed with `arch -x86_64` to select the Intel slice.
+  # Runs in parallel with build-macos-arm64.
+  # ---------------------------------------------------------------------------
+  build-macos-x64:
+    name: Build macOS x86_64 toolchain
+    runs-on: macos-14
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install x86_64 Homebrew (Rosetta 2)
         run: |
           if [ ! -f /usr/local/bin/brew ]; then
@@ -126,7 +317,11 @@ jobs:
       - name: Locate x86_64 toolchain binaries
         id: locate-x64
         run: |
-          BIN_DIR=$(arch -x86_64 /usr/local/bin/brew --prefix avr-gcc)/bin
+          # Use the global x86_64 Homebrew bin dir (/usr/local/bin) where all
+          # formula executables are symlinked (both avr-gcc and avr-binutils tools
+          # such as avr-as, avr-objcopy). Using `brew --prefix avr-gcc` only finds
+          # the avr-gcc Cellar prefix and misses the avr-binutils tools.
+          BIN_DIR=/usr/local/bin
           echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
           echo "Found x86_64 avr-gcc at: $BIN_DIR/avr-gcc"
           arch -x86_64 "$BIN_DIR/avr-gcc" --version
@@ -155,8 +350,10 @@ jobs:
   # ---------------------------------------------------------------------------
   package-linux-x64:
     name: Package Linux x64 wheel
-    needs: build-linux-windows
+    needs: build-linux-x64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -177,8 +374,10 @@ jobs:
 
   package-win-x64:
     name: Package Windows x64 wheel
-    needs: build-linux-windows
+    needs: build-win-x64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -199,8 +398,10 @@ jobs:
 
   package-win-x86:
     name: Package Windows x86 wheel
-    needs: build-linux-windows
+    needs: build-win-x86
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -223,6 +424,8 @@ jobs:
     name: Package macOS arm64 wheel
     needs: build-macos-arm64
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -243,7 +446,7 @@ jobs:
 
   package-macos-x64:
     name: Package macOS x86_64 wheel
-    needs: build-macos-arm64
+    needs: build-macos-x64
     runs-on: ubuntu-latest
     permissions:
       contents: read

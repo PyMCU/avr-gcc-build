@@ -136,6 +136,12 @@ OPTS_GDB="
 
 OPTS_LIBC=""
 
+# Detect native MSYS2/MinGW Windows build environment.
+# When $MSYSTEM is set (e.g. MINGW64 or MINGW32), we are running inside MSYS2
+# and build the Windows toolchain natively without cross-compilation.
+MSYS2_BUILD=0
+[[ -n "${MSYSTEM:-}" ]] && MSYS2_BUILD=1
+
 TMP_DIR=${CWD}/tmp
 LOG_DIR=${CWD}
 
@@ -147,7 +153,11 @@ log()
 
 installPackages()
 {
-	local requiredPackages=("wget" "make" "mingw-w64" "gcc" "g++" "bzip2" "xz-utils" "autoconf" "texinfo" "libgmp-dev" "libmpfr-dev" "libexpat1-dev")
+	local requiredPackages=("wget" "make" "gcc" "g++" "bzip2" "xz-utils" "autoconf" "texinfo" "libgmp-dev" "libmpfr-dev" "libexpat1-dev")
+	# mingw-w64 is only needed when cross-compiling for Windows
+	if [[ $FOR_WINX86 -eq 1 ]] || [[ $FOR_WINX64 -eq 1 ]]; then
+		requiredPackages+=("mingw-w64")
+	fi
 
 	if [[ $EUID -ne 0 ]]; then
 		log "Not running as root user. Checking whether all required packages are installed..."
@@ -271,8 +281,13 @@ buildBinutils()
 	cd $NAME_BINUTILS/obj-avr
 
 	[[ $FOR_LINUX -eq 1 ]] && log "Making for Linux..." && confMake "$PREFIX_GCC_LINUX" "$OPTS_BINUTILS"
-	[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_BINUTILS" --host=$HOST_WINX86
-	[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_BINUTILS" --host=$HOST_WINX64
+	if [[ $MSYS2_BUILD -eq 1 ]]; then
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86 (native)..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_BINUTILS"
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64 (native)..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_BINUTILS"
+	else
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_BINUTILS" --host=$HOST_WINX86
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_BINUTILS" --host=$HOST_WINX64
+	fi
 
 	cd ../../
 }
@@ -295,8 +310,13 @@ buildGCC()
 	# fixGCCAVR
 
 	[[ $FOR_LINUX -eq 1 ]] && log "Making for Linux..." && confMake "$PREFIX_GCC_LINUX" "$OPTS_GCC"
-	[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_GCC" --host=$HOST_WINX86
-	[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_GCC" --host=$HOST_WINX64
+	if [[ $MSYS2_BUILD -eq 1 ]]; then
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86 (native)..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_GCC"
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64 (native)..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_GCC"
+	else
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && confMake "$PREFIX_GCC_WINX86" "$OPTS_GCC" --host=$HOST_WINX86
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && confMake "$PREFIX_GCC_WINX64" "$OPTS_GCC" --host=$HOST_WINX64
+	fi
 
 	cd ../../
 }
@@ -348,8 +368,39 @@ buildGDB()
 		cd ../../
 	}
 
-	[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && buildGDBWin "$PREFIX_GCC_WINX86" $HOST_WINX86
-	[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && buildGDBWin "$PREFIX_GCC_WINX64" $HOST_WINX64
+	buildGDBWinNative()
+	{
+		# Native MSYS2 build: no cross-compilation host triplet needed.
+		local NATIVE_TMP=$TMP_DIR/native
+
+		log "GMP..."
+		cd $NAME_GMP/obj
+		confMake "$NATIVE_TMP"
+		cd ../../
+
+		log "MPFR..."
+		cd $NAME_MPFR/obj
+		confMake "$NATIVE_TMP" "--with-gmp=$NATIVE_TMP --disable-shared --enable-static"
+		cd ../../
+
+		log "Expat..."
+		cd ${NAME_EXPAT[1]}/obj
+		confMake "$NATIVE_TMP" "--disable-shared --enable-static" "" "../conftools/config.guess"
+		cd ../../
+
+		log "GDB..."
+		cd $NAME_GDB/obj-avr
+		confMake "$1" "--with-gmp=$NATIVE_TMP --with-mpfr=$NATIVE_TMP --with-libexpat-prefix=$NATIVE_TMP $OPTS_GDB"
+		cd ../../
+	}
+
+	if [[ $MSYS2_BUILD -eq 1 ]]; then
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86 (native)..." && buildGDBWinNative "$PREFIX_GCC_WINX86"
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64 (native)..." && buildGDBWinNative "$PREFIX_GCC_WINX64"
+	else
+		[[ $FOR_WINX86 -eq 1 ]] && log "Making for Windows x86..." && buildGDBWin "$PREFIX_GCC_WINX86" $HOST_WINX86
+		[[ $FOR_WINX64 -eq 1 ]] && log "Making for Windows x64..." && buildGDBWin "$PREFIX_GCC_WINX64" $HOST_WINX64
+	fi
 
 	# For some reason we need some random command here otherwise
 	# the script exits with no error when FOR_WINX64=0
@@ -378,13 +429,29 @@ buildAVRLIBC()
 	cd ../../
 }
 
-installPackages
+# Package installation is only applicable on Linux; on MSYS2/Windows the
+# required packages are installed by the CI workflow before running this script.
+if [[ "$(uname -s)" == "Linux" ]]; then
+	installPackages
+fi
 
 log "Start"
 
 TIME_START=$(date +%s)
 
-export PATH="$PREFIX_GCC_LINUX"/bin:"$PATH"
+if [[ $MSYS2_BUILD -eq 1 ]]; then
+	# Native MSYS2 build: put the Windows prefix bin dir in PATH so that
+	# avr-libc's build can find the just-built avr-gcc.
+	if [[ $FOR_WINX64 -eq 1 ]]; then
+		export PATH="$PREFIX_GCC_WINX64/bin:$PATH"
+	elif [[ $FOR_WINX86 -eq 1 ]]; then
+		export PATH="$PREFIX_GCC_WINX86/bin:$PATH"
+	fi
+elif [[ $FOR_LINUX -eq 1 ]]; then
+	# Cross-compilation on Linux: add the Linux prefix so the Windows build
+	# can invoke avr-gcc for the canadian-cross specs generation step.
+	export PATH="$PREFIX_GCC_LINUX/bin:$PATH"
+fi
 export CC=""
 
 cleanup
