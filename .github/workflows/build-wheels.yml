@@ -89,75 +89,59 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # Windows x64: native build inside MSYS2 MINGW64 on a Windows runner.
-  # No dependency on build-linux-x64 — avr-gcc is compiled natively.
+  # Windows x64: install pre-built AVR toolchain via MSYS2 MINGW64 packages.
+  # Using pre-built packages mirrors the macOS Homebrew approach and avoids
+  # the multi-hour from-source GCC build that reliably OOMs on the runner.
   # ---------------------------------------------------------------------------
   build-win-x64:
     name: Build Windows x64 toolchain
     runs-on: windows-latest
-    timeout-minutes: 240
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2 (MINGW64)
+      - name: Set up MSYS2 (MINGW64) and install AVR toolchain
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: false
           install: >-
             base-devel
-            mingw-w64-x86_64-toolchain
-            wget
-            texinfo
+            mingw-w64-x86_64-avr-gcc
+            mingw-w64-x86_64-avr-libc
+            mingw-w64-x86_64-avr-binutils
 
-      - name: Restore source tarball cache
-        uses: actions/cache@v4
-        with:
-          path: tarball-cache/
-          key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
-          restore-keys: avr-sources-v1-
-
-      - name: Set up wget cache wrapper
+      - name: Locate x64 toolchain binaries
+        id: locate-win-x64
         shell: msys2 {0}
         run: |
-          mkdir -p tarball-cache
-          mkdir -p /usr/local/bin
-          cat > /usr/local/bin/wget << 'WRAPPER'
-          #!/bin/bash
-          URL=""
-          for arg in "$@"; do
-            case "$arg" in http*|ftp*) URL="$arg" ;; esac
+          BIN_DIR=/mingw64/bin
+          echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
+          echo "Found x64 avr-gcc at: $BIN_DIR/avr-gcc.exe"
+          "$BIN_DIR/avr-gcc.exe" --version
+
+      - name: Assemble x64 toolchain directory
+        shell: msys2 {0}
+        run: |
+          mkdir -p win-x64-toolchain-staged/bin
+          BIN_DIR="${{ steps.locate-win-x64.outputs.bin_dir }}"
+          for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
+            [ -f "$BIN_DIR/${bin}.exe" ] && cp "$BIN_DIR/${bin}.exe" win-x64-toolchain-staged/bin/ || true
           done
-          FILE="$(basename "$URL")"
-          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
-          if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
-            echo "[wget-cache] Cache hit: $FILE"
-            cp "$CACHE_DIR/$FILE" "$FILE"
-          else
-            /usr/bin/wget "$@"
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              cp "$FILE" "$CACHE_DIR/" 2>/dev/null || true
-            fi
+          SYSROOT=/mingw64/avr
+          if [ -d "$SYSROOT" ]; then
+            cp -r "$SYSROOT" win-x64-toolchain-staged/avr
           fi
-          WRAPPER
-          chmod +x /usr/local/bin/wget
 
-      - name: Build Windows x64 AVR-GCC toolchain
-        shell: msys2 {0}
-        env:
-          FOR_LINUX: "0"
-          FOR_WINX64: "1"
-          FOR_WINX86: "0"
-          JOBCOUNT: "4"
-        run: bash avr-gcc-build.sh
-
-      - name: Stage Windows x64 toolchain for upload
+      - name: Verify x64 toolchain
         shell: msys2 {0}
         run: |
-          WIN_DIR=$(ls -d build/avr-gcc-*-x64-windows | head -1)
-          cp -r "$WIN_DIR" win-x64-toolchain-staged
+          for bin in avr-gcc.exe avr-as.exe avr-objcopy.exe; do
+            test -f win-x64-toolchain-staged/bin/$bin || (echo "MISSING: $bin" && exit 1)
+          done
+          echo "x64 toolchain OK"
 
       - name: Upload Windows x64 toolchain
         uses: actions/upload-artifact@v4
@@ -167,75 +151,58 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # Windows x86: native build inside MSYS2 MINGW32 on a Windows runner.
+  # Windows x86: install pre-built AVR toolchain via MSYS2 MINGW32 packages.
   # Runs in parallel with build-win-x64.
   # ---------------------------------------------------------------------------
   build-win-x86:
     name: Build Windows x86 toolchain
     runs-on: windows-latest
-    timeout-minutes: 240
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2 (MINGW32)
+      - name: Set up MSYS2 (MINGW32) and install AVR toolchain
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW32
           update: false
           install: >-
             base-devel
-            mingw-w64-i686-toolchain
-            wget
-            texinfo
+            mingw-w64-i686-avr-gcc
+            mingw-w64-i686-avr-libc
+            mingw-w64-i686-avr-binutils
 
-      - name: Restore source tarball cache
-        uses: actions/cache@v4
-        with:
-          path: tarball-cache/
-          key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
-          restore-keys: avr-sources-v1-
-
-      - name: Set up wget cache wrapper
+      - name: Locate x86 toolchain binaries
+        id: locate-win-x86
         shell: msys2 {0}
         run: |
-          mkdir -p tarball-cache
-          mkdir -p /usr/local/bin
-          cat > /usr/local/bin/wget << 'WRAPPER'
-          #!/bin/bash
-          URL=""
-          for arg in "$@"; do
-            case "$arg" in http*|ftp*) URL="$arg" ;; esac
+          BIN_DIR=/mingw32/bin
+          echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
+          echo "Found x86 avr-gcc at: $BIN_DIR/avr-gcc.exe"
+          "$BIN_DIR/avr-gcc.exe" --version
+
+      - name: Assemble x86 toolchain directory
+        shell: msys2 {0}
+        run: |
+          mkdir -p win-x86-toolchain-staged/bin
+          BIN_DIR="${{ steps.locate-win-x86.outputs.bin_dir }}"
+          for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
+            [ -f "$BIN_DIR/${bin}.exe" ] && cp "$BIN_DIR/${bin}.exe" win-x86-toolchain-staged/bin/ || true
           done
-          FILE="$(basename "$URL")"
-          CACHE_DIR="$(cygpath -u "${GITHUB_WORKSPACE}")/tarball-cache"
-          if [ -n "$FILE" ] && [ -f "$CACHE_DIR/$FILE" ]; then
-            echo "[wget-cache] Cache hit: $FILE"
-            cp "$CACHE_DIR/$FILE" "$FILE"
-          else
-            /usr/bin/wget "$@"
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              cp "$FILE" "$CACHE_DIR/" 2>/dev/null || true
-            fi
+          SYSROOT=/mingw32/avr
+          if [ -d "$SYSROOT" ]; then
+            cp -r "$SYSROOT" win-x86-toolchain-staged/avr
           fi
-          WRAPPER
-          chmod +x /usr/local/bin/wget
 
-      - name: Build Windows x86 AVR-GCC toolchain
-        shell: msys2 {0}
-        env:
-          FOR_LINUX: "0"
-          FOR_WINX64: "0"
-          FOR_WINX86: "1"
-          JOBCOUNT: "4"
-        run: bash avr-gcc-build.sh
-
-      - name: Stage Windows x86 toolchain for upload
+      - name: Verify x86 toolchain
         shell: msys2 {0}
         run: |
-          WIN_DIR=$(ls -d build/avr-gcc-*-x86-windows | head -1)
-          cp -r "$WIN_DIR" win-x86-toolchain-staged
+          for bin in avr-gcc.exe avr-as.exe avr-objcopy.exe; do
+            test -f win-x86-toolchain-staged/bin/$bin || (echo "MISSING: $bin" && exit 1)
+          done
+          echo "x86 toolchain OK"
 
       - name: Upload Windows x86 toolchain
         uses: actions/upload-artifact@v4
@@ -281,6 +248,13 @@ jobs:
           if [ -d "$SYSROOT" ]; then
             cp -r "$SYSROOT" output/avr-gcc-homebrew-arm64-macos/avr
           fi
+
+      - name: Verify arm64 toolchain
+        run: |
+          for bin in avr-gcc avr-as avr-objcopy; do
+            test -f output/avr-gcc-homebrew-arm64-macos/bin/$bin || (echo "MISSING: $bin" && exit 1)
+          done
+          echo "arm64 toolchain OK"
 
       - name: Upload macOS arm64 toolchain
         uses: actions/upload-artifact@v4
@@ -340,6 +314,13 @@ jobs:
             cp -r "$SYSROOT" output/avr-gcc-homebrew-x64-macos/avr
           fi
 
+      - name: Verify x86_64 toolchain
+        run: |
+          for bin in avr-gcc avr-as avr-objcopy; do
+            test -f output/avr-gcc-homebrew-x64-macos/bin/$bin || (echo "MISSING: $bin" && exit 1)
+          done
+          echo "x86_64 toolchain OK"
+
       - name: Upload macOS x86_64 toolchain
         uses: actions/upload-artifact@v4
         with:
@@ -362,13 +343,17 @@ jobs:
         with:
           name: toolchain-linux-x64
           path: toolchain/
+      - name: Verify toolchain artifact
+        run: |
+          echo "Contents of toolchain/:"
+          find toolchain/ -maxdepth 2 | head -20
+          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
       - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: manylinux_2_17_x86_64
-        run: uv build --wheel
+        run: uv build --wheel python/
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-linux-x64
@@ -386,13 +371,17 @@ jobs:
         with:
           name: toolchain-win-x64
           path: toolchain/
+      - name: Verify toolchain artifact
+        run: |
+          echo "Contents of toolchain/:"
+          find toolchain/ -maxdepth 2 | head -20
+          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
       - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: win_amd64
-        run: uv build --wheel
+        run: uv build --wheel python/
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-win-x64
@@ -410,13 +399,17 @@ jobs:
         with:
           name: toolchain-win-x86
           path: toolchain/
+      - name: Verify toolchain artifact
+        run: |
+          echo "Contents of toolchain/:"
+          find toolchain/ -maxdepth 2 | head -20
+          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
       - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: win32
-        run: uv build --wheel
+        run: uv build --wheel python/
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-win-x86
@@ -434,13 +427,17 @@ jobs:
         with:
           name: toolchain-macos-arm64
           path: toolchain/
+      - name: Verify toolchain artifact
+        run: |
+          echo "Contents of toolchain/:"
+          find toolchain/ -maxdepth 2 | head -20
+          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
       - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: macosx_14_0_arm64
-        run: uv build --wheel
+        run: uv build --wheel python/
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-arm64
@@ -458,13 +455,17 @@ jobs:
         with:
           name: toolchain-macos-x64
           path: toolchain/
+      - name: Verify toolchain artifact
+        run: |
+          echo "Contents of toolchain/:"
+          find toolchain/ -maxdepth 2 | head -20
+          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
       - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        working-directory: python/
         env:
           AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
           WHEEL_PLATFORM_TAG: macosx_13_0_x86_64
-        run: uv build --wheel
+        run: uv build --wheel python/
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-x64
@@ -483,6 +484,7 @@ jobs:
       - package-macos-x64
     runs-on: ubuntu-latest
     permissions:
+      # NOTE: Change to 'contents: write' when re-enabling GitHub Release creation.
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -497,8 +499,7 @@ jobs:
           merge-multiple: true
 
       - name: Build sdist (no binaries)
-        working-directory: python/
-        run: uv build --sdist
+        run: uv build --sdist python/
 
       - name: Move sdist to dist/
         run: mv python/dist/*.tar.gz dist/
@@ -576,6 +577,7 @@ jobs:
     name: Publish to private PyPI
     needs: collect-and-release
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
     permissions:
       contents: read
     steps:
