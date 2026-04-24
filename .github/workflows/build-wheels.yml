@@ -30,7 +30,15 @@ jobs:
           key: avr-sources-v1-${{ hashFiles('avr-gcc-build.sh') }}
           restore-keys: avr-sources-v1-
 
+      - name: Restore toolchain cache
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: linux-toolchain-staged/
+          key: toolchain-linux-x64-v1-${{ hashFiles('avr-gcc-build.sh') }}
+
       - name: Set up wget cache wrapper
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p tarball-cache
           mkdir -p /tmp/wget-wrap
@@ -56,6 +64,7 @@ jobs:
           echo "/tmp/wget-wrap" >> $GITHUB_PATH
 
       - name: Install build dependencies
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -63,22 +72,23 @@ jobs:
             libgmp-dev libmpfr-dev libexpat1-dev
 
       - name: Build Linux x64 AVR-GCC toolchain
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         env:
           FOR_LINUX: "1"
           FOR_WINX64: "0"
           JOBCOUNT: "4"
         run: bash avr-gcc-build.sh
 
-      - name: Verify Linux toolchain
-        run: |
-          LINUX_DIR=$(ls -d build/avr-gcc-*-x64-linux | head -1)
-          echo "Found: $LINUX_DIR"
-          "$LINUX_DIR/bin/avr-gcc" --version
-
       - name: Stage Linux toolchain for upload
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           LINUX_DIR=$(ls -d build/avr-gcc-*-x64-linux | head -1)
           cp -r "$LINUX_DIR" linux-toolchain-staged
+
+      - name: Verify Linux toolchain
+        run: |
+          echo "Found: linux-toolchain-staged"
+          linux-toolchain-staged/bin/avr-gcc --version
 
       - name: Upload Linux x64 toolchain
         uses: actions/upload-artifact@v4
@@ -101,19 +111,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2 (MINGW64) and install AVR toolchain
+      - name: Set up MSYS2 (MINGW64)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: false
-          install: >-
-            base-devel
-            mingw-w64-x86_64-avr-gcc
-            mingw-w64-x86_64-avr-libc
-            mingw-w64-x86_64-avr-binutils
+          install: base-devel
+
+      - name: Query AVR package version
+        id: pkg-ver
+        shell: msys2 {0}
+        run: |
+          VER=$(pacman -Si mingw-w64-x86_64-avr-gcc | awk '/^Version/ {print $3; exit}')
+          echo "ver=$VER" >> $GITHUB_OUTPUT
+          echo "AVR-GCC package version: $VER"
+
+      - name: Restore toolchain cache
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: win-x64-toolchain-staged/
+          key: toolchain-win-x64-v1-${{ steps.pkg-ver.outputs.ver }}
+
+      - name: Install AVR toolchain packages
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: pacman -S --noconfirm mingw-w64-x86_64-avr-gcc mingw-w64-x86_64-avr-libc mingw-w64-x86_64-avr-binutils
 
       - name: Locate x64 toolchain binaries
         id: locate-win-x64
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
           BIN_DIR=/mingw64/bin
@@ -122,10 +149,11 @@ jobs:
           "$BIN_DIR/avr-gcc.exe" --version
 
       - name: Assemble x64 toolchain directory
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
           mkdir -p win-x64-toolchain-staged/bin
-          BIN_DIR="${{ steps.locate-win-x64.outputs.bin_dir }}"
+          BIN_DIR=/mingw64/bin
           for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
             if [ -f "$BIN_DIR/${bin}.exe" ]; then
               cp "$BIN_DIR/${bin}.exe" win-x64-toolchain-staged/bin/
@@ -167,13 +195,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install AVR toolchain via Homebrew (arm64)
+      - name: Tap AVR Homebrew formula (arm64)
+        run: brew tap osx-cross/avr
+
+      - name: Query AVR formula version (arm64)
+        id: formula-ver
         run: |
-          brew tap osx-cross/avr
-          brew install avr-gcc avr-binutils
+          FORMULA_PATH=$(brew formula osx-cross/avr/avr-gcc)
+          FORMULA_HASH=$(shasum -a 256 "$FORMULA_PATH" | awk '{print $1}')
+          echo "hash=$FORMULA_HASH" >> $GITHUB_OUTPUT
+          echo "Formula hash: $FORMULA_HASH"
+
+      - name: Restore toolchain cache (arm64)
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: output/avr-gcc-homebrew-arm64-macos/
+          key: toolchain-macos-arm64-v1-${{ steps.formula-ver.outputs.hash }}
+
+      - name: Install AVR toolchain via Homebrew (arm64)
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        run: brew install avr-gcc avr-binutils
 
       - name: Locate arm64 toolchain binaries
         id: locate-arm64
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           AVR_GCC=$(which avr-gcc)
           BIN_DIR=$(dirname "$AVR_GCC")
@@ -182,6 +228,7 @@ jobs:
           avr-gcc --version
 
       - name: Assemble arm64 toolchain directory
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p output/avr-gcc-homebrew-arm64-macos/bin
           BIN_DIR="${{ steps.locate-arm64.outputs.bin_dir }}"
@@ -230,13 +277,32 @@ jobs:
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           fi
 
-      - name: Install AVR toolchain via Homebrew (x86_64)
+      - name: Tap AVR Homebrew formula (x86_64)
         run: |
           arch -x86_64 /usr/local/bin/brew tap osx-cross/avr
-          arch -x86_64 /usr/local/bin/brew install avr-gcc avr-binutils
+
+      - name: Query AVR formula version (x86_64)
+        id: formula-ver
+        run: |
+          FORMULA_PATH=$(arch -x86_64 /usr/local/bin/brew formula osx-cross/avr/avr-gcc)
+          FORMULA_HASH=$(shasum -a 256 "$FORMULA_PATH" | awk '{print $1}')
+          echo "hash=$FORMULA_HASH" >> $GITHUB_OUTPUT
+          echo "Formula hash: $FORMULA_HASH"
+
+      - name: Restore toolchain cache (x86_64)
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: output/avr-gcc-homebrew-x64-macos/
+          key: toolchain-macos-x64-v1-${{ steps.formula-ver.outputs.hash }}
+
+      - name: Install AVR toolchain packages via Homebrew (x86_64)
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        run: arch -x86_64 /usr/local/bin/brew install avr-gcc avr-binutils
 
       - name: Locate x86_64 toolchain binaries
         id: locate-x64
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           # Use the global x86_64 Homebrew bin dir (/usr/local/bin) where all
           # formula executables are symlinked (both avr-gcc and avr-binutils tools
@@ -248,6 +314,7 @@ jobs:
           arch -x86_64 "$BIN_DIR/avr-gcc" --version
 
       - name: Assemble x86_64 toolchain directory
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p output/avr-gcc-homebrew-x64-macos/bin
           BIN_DIR="${{ steps.locate-x64.outputs.bin_dir }}"
