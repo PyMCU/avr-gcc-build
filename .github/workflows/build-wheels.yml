@@ -123,6 +123,7 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir -p tarball-cache
+          mkdir -p /usr/local/bin
           cat > /usr/local/bin/wget << 'WRAPPER'
           #!/bin/bash
           URL=""
@@ -200,6 +201,7 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir -p tarball-cache
+          mkdir -p /usr/local/bin
           cat > /usr/local/bin/wget << 'WRAPPER'
           #!/bin/bash
           URL=""
