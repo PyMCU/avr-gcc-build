@@ -157,73 +157,6 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # Windows x86: install pre-built AVR toolchain via MSYS2 MINGW32 packages.
-  # Runs in parallel with build-win-x64.
-  # ---------------------------------------------------------------------------
-  build-win-x86:
-    name: Build Windows x86 toolchain
-    runs-on: windows-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up MSYS2 (MINGW32) and install AVR toolchain
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW32
-          update: false
-          install: >-
-            base-devel
-            mingw-w64-i686-avr-gcc
-            mingw-w64-i686-avr-libc
-            mingw-w64-i686-avr-binutils
-
-      - name: Locate x86 toolchain binaries
-        id: locate-win-x86
-        shell: msys2 {0}
-        run: |
-          BIN_DIR=/mingw32/bin
-          echo "bin_dir=$BIN_DIR" >> $GITHUB_OUTPUT
-          echo "Found x86 avr-gcc at: $BIN_DIR/avr-gcc.exe"
-          "$BIN_DIR/avr-gcc.exe" --version
-
-      - name: Assemble x86 toolchain directory
-        shell: msys2 {0}
-        run: |
-          mkdir -p win-x86-toolchain-staged/bin
-          BIN_DIR="${{ steps.locate-win-x86.outputs.bin_dir }}"
-          for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
-            if [ -f "$BIN_DIR/${bin}.exe" ]; then
-              cp "$BIN_DIR/${bin}.exe" win-x86-toolchain-staged/bin/
-              echo "Copied: ${bin}.exe"
-            else
-              echo "Not found (skipped): ${bin}.exe"
-            fi
-          done
-          SYSROOT=/mingw32/avr
-          if [ -d "$SYSROOT" ]; then
-            cp -r "$SYSROOT" win-x86-toolchain-staged/avr
-          fi
-
-      - name: Verify x86 toolchain
-        shell: msys2 {0}
-        run: |
-          # Check the three binaries required by hatch_build.py (_REQUIRED_BINS).
-          for bin in avr-gcc.exe avr-as.exe avr-objcopy.exe; do
-            test -f win-x86-toolchain-staged/bin/$bin || (echo "MISSING: $bin" && exit 1)
-          done
-          echo "x86 toolchain OK"
-
-      - name: Upload Windows x86 toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-win-x86
-          path: win-x86-toolchain-staged/
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
   # macOS arm64 — native Apple Silicon (macos-14).
   # ---------------------------------------------------------------------------
   build-macos-arm64:
@@ -401,34 +334,6 @@ jobs:
           name: wheel-win-x64
           path: python/dist/*.whl
 
-  package-win-x86:
-    name: Package Windows x86 wheel
-    needs: build-win-x86
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: toolchain-win-x86
-          path: toolchain/
-      - name: Verify toolchain artifact
-        run: |
-          echo "Contents of toolchain/:"
-          find toolchain/ -maxdepth 2 | head -20
-          test -d toolchain/bin || (echo "ERROR: toolchain/bin missing" && exit 1)
-      - uses: astral-sh/setup-uv@v6
-      - name: Build wheel
-        env:
-          AVRT_TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain
-          WHEEL_PLATFORM_TAG: win32
-        run: uv build --wheel python/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-win-x86
-          path: python/dist/*.whl
-
   package-macos-arm64:
     name: Package macOS arm64 wheel
     needs: build-macos-arm64
@@ -493,7 +398,6 @@ jobs:
     needs:
       - package-linux-x64
       - package-win-x64
-      - package-win-x86
       - package-macos-arm64
       - package-macos-x64
     runs-on: ubuntu-latest
