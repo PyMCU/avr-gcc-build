@@ -66,7 +66,6 @@ jobs:
         env:
           FOR_LINUX: "1"
           FOR_WINX64: "0"
-          FOR_WINX86: "0"
           JOBCOUNT: "4"
         run: bash avr-gcc-build.sh
 
@@ -495,7 +494,7 @@ jobs:
     name: Publish to private PyPI
     needs: collect-and-release
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     steps:
