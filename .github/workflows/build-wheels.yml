@@ -128,7 +128,12 @@ jobs:
           mkdir -p win-x64-toolchain-staged/bin
           BIN_DIR="${{ steps.locate-win-x64.outputs.bin_dir }}"
           for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
-            [ -f "$BIN_DIR/${bin}.exe" ] && cp "$BIN_DIR/${bin}.exe" win-x64-toolchain-staged/bin/ || true
+            if [ -f "$BIN_DIR/${bin}.exe" ]; then
+              cp "$BIN_DIR/${bin}.exe" win-x64-toolchain-staged/bin/
+              echo "Copied: ${bin}.exe"
+            else
+              echo "Not found (skipped): ${bin}.exe"
+            fi
           done
           SYSROOT=/mingw64/avr
           if [ -d "$SYSROOT" ]; then
@@ -138,6 +143,7 @@ jobs:
       - name: Verify x64 toolchain
         shell: msys2 {0}
         run: |
+          # Check the three binaries required by hatch_build.py (_REQUIRED_BINS).
           for bin in avr-gcc.exe avr-as.exe avr-objcopy.exe; do
             test -f win-x64-toolchain-staged/bin/$bin || (echo "MISSING: $bin" && exit 1)
           done
@@ -189,7 +195,12 @@ jobs:
           mkdir -p win-x86-toolchain-staged/bin
           BIN_DIR="${{ steps.locate-win-x86.outputs.bin_dir }}"
           for bin in avr-gcc avr-g++ avr-as avr-ld avr-ar avr-objcopy avr-objdump avr-size avr-nm avr-strip avr-ranlib avr-strings; do
-            [ -f "$BIN_DIR/${bin}.exe" ] && cp "$BIN_DIR/${bin}.exe" win-x86-toolchain-staged/bin/ || true
+            if [ -f "$BIN_DIR/${bin}.exe" ]; then
+              cp "$BIN_DIR/${bin}.exe" win-x86-toolchain-staged/bin/
+              echo "Copied: ${bin}.exe"
+            else
+              echo "Not found (skipped): ${bin}.exe"
+            fi
           done
           SYSROOT=/mingw32/avr
           if [ -d "$SYSROOT" ]; then
@@ -199,6 +210,7 @@ jobs:
       - name: Verify x86 toolchain
         shell: msys2 {0}
         run: |
+          # Check the three binaries required by hatch_build.py (_REQUIRED_BINS).
           for bin in avr-gcc.exe avr-as.exe avr-objcopy.exe; do
             test -f win-x86-toolchain-staged/bin/$bin || (echo "MISSING: $bin" && exit 1)
           done
@@ -251,6 +263,7 @@ jobs:
 
       - name: Verify arm64 toolchain
         run: |
+          # Check the three binaries required by hatch_build.py (_REQUIRED_BINS).
           for bin in avr-gcc avr-as avr-objcopy; do
             test -f output/avr-gcc-homebrew-arm64-macos/bin/$bin || (echo "MISSING: $bin" && exit 1)
           done
@@ -316,6 +329,7 @@ jobs:
 
       - name: Verify x86_64 toolchain
         run: |
+          # Check the three binaries required by hatch_build.py (_REQUIRED_BINS).
           for bin in avr-gcc avr-as avr-objcopy; do
             test -f output/avr-gcc-homebrew-x64-macos/bin/$bin || (echo "MISSING: $bin" && exit 1)
           done
