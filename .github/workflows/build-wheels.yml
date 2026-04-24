@@ -552,7 +552,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Publish to PyPI
-        run: uv publish dist/
+        run: uv publish dist/*
 
   # ---------------------------------------------------------------------------
   # Publish to private PyPI index via headscale
@@ -587,4 +587,4 @@ jobs:
             --publish-url "${{ secrets.PRIVATE_PYPI_URL }}" \
             --username "${{ secrets.PRIVATE_PYPI_USERNAME }}" \
             --password "${{ secrets.PRIVATE_PYPI_TOKEN }}" \
-            dist/
+            dist/*
